@@ -1,82 +1,148 @@
-﻿(function () {
+﻿"use strict";
+
+(function () {
     "use strict";
 
     var dataset_helper = {
-        set: function (obj, property, val) {
+        set: function set(obj, property, val) {
             if (obj != undefined) {
                 if (obj.dataset == undefined) {
                     obj.setAttribute("data-" + property, val);
-                }
-                else {
+                } else {
                     obj.dataset[property] = val;
                 }
             }
         },
-        read: function (obj, property) {
+        read: function read(obj, property) {
             if (obj == undefined) return undefined;
-            if (obj.dataset == undefined)
-                return obj.getAttribute("data-" + property);
-            else
-                return obj.dataset[property];
+            if (obj.dataset == undefined) return obj.getAttribute("data-" + property);else return obj.dataset[property];
         },
-        clear: function (obj, property) {
+        clear: function clear(obj, property) {
             if (obj == undefined) return;
-            if (obj.hasAttribute("data-" + property))
-                obj.removeAttribute("data-" + property);
+            if (obj.hasAttribute("data-" + property)) obj.removeAttribute("data-" + property);
         }
+    };
+
+    function handler_base() {
+        this.handlers = {};
     }
-    var getStyle = function (dom, attr) {
+    handler_base.prototype = {
+        constructor: handler_base,
+        add: function add(type, handler) {
+            if (typeof this.handlers[type] == 'undefined') {
+                this.handlers[type] = new Array();
+            }
+            this.handlers[type].push(handler);
+        },
+        remove: function remove(type, handler) {
+            if (this.handlers[type] instanceof Array) {
+                var handlers = this.handlers[type];
+                for (var i = 0, len = handlers.length; i < len; i++) {
+                    if (handler[i] == handler) {
+                        handlers.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        },
+        clear: function clear(type) {
+            if (this.handlers[type] instanceof Array) {
+                this.handlers[type] = undefined;
+            }
+        },
+        trigger: function trigger(event, sender, args) {
+            if (this.handlers[event] instanceof Array) {
+                var handlers = this.handlers[event];
+                for (var i = 0, len = handlers.length; i < len; i++) {
+                    handlers[i].call(sender, sender, args);
+                }
+            }
+        }
+    };
+
+    var getStyle = function getStyle(dom, attr) {
         return dom.currentStyle ? dom.currentStyle[attr] : getComputedStyle(dom, false)[attr];
-    }
+    };
 
     var flyout_curr = undefined;
+    var flyout_pos_curr = undefined;
     //#region Flyout
-    var windowresizing = function () {
+    var windowresizing = function windowresizing() {
         $.throttle(10, function () {
             var context = flyout_curr;
-            if (context == undefined)
-                return;
+            if (context == undefined) return;
             var base = $("div[data-control='flyoutbase']")[0];
             var top = $(context.parent).offset().top + context.parent.offsetHeight + 5;
+            if (flyout_pos_curr == "top") {
+                top = $(context.parent).offset().top - base.offsetHeight - 5;
+            }
             var left = $(context.parent).offset().left;
             var itemwidth = context.item.offsetWidth + parseInt(getStyle(base, "paddingLeft"), 10) + parseInt(getStyle(base, "paddingRight"), 10);
-            if (left + itemwidth + 10 > $(window).width())
-                left = $(window).width() - 10 - itemwidth;
+            if (left + itemwidth + 10 > $(window).width()) left = $(window).width() - 10 - itemwidth;
             base.style.top = top + "px";
             base.style.left = left + "px";
         })();
-    }
-    var flyout_cover_click = function () {
+    };
+    var flyout_cover_click = function flyout_cover_click() {
         flyout_hide();
-    }
-    var flyout_hide = function () {
+    };
+    var flyout_hide = function flyout_hide() {
+        // hiding
+        var flyout = $("div[data-control='flyoutbase']")[0].children[0];
+        var parent = flyout_curr.parent;
+        var hidingargs = {
+            prevent_hide: false,
+            flyout: flyout
+        };
+        if (parent.context != undefined && parent.context.events != undefined) parent.context.events.trigger("flyout_hiding", parent, hidingargs);
+        if (hidingargs.prevent_hide) return;
+
         window.removeEventListener("resize", windowresizing, false);
         $("div[data-control='flyoutlayer']").removeClass("flyoutshow");
-        if (flyout_curr == undefined)
-            return;
-        if (flyout_curr.parent.context != undefined && flyout_curr.parent.context.events != undefined)
-            flyout_curr.parent.context.events.trigger("flyoutHide");
+
+        if (parent.context != undefined && parent.context.events != undefined) parent.context.events.trigger("flyout_hide", parent, {});
         flyout_curr = undefined;
-    }
-    var flyout_show = function () {
+        flyout_pos_curr = undefined;
+    };
+    var flyout_show = function flyout_show() {
         var context = this;
+        var position = "bottom";
+        var _p = dataset_helper.read(context.item, "place");
+        if (_p) position = _p;
+        var parent = context.parent;
+        // showing
+        var showingargs = {
+            flyout: context.item,
+            prevent_show: false,
+            position: position
+        };
+        if (parent.context != undefined && parent.context.events != undefined) parent.context.events.trigger("flyout_showing", parent, showingargs);
+        if (showingargs.prevent_show) return;
+
+        // show flyout
         flyout_curr = context;
+        flyout_pos_curr = position;
         $("div[data-control='flyoutlayer']").addClass("flyoutshow");
         var base = $("div[data-control='flyoutbase']")[0];
         base.innerHTML = "";
         base.appendChild(context.item);
-        var top = $(context.parent).offset().top + context.parent.offsetHeight + 5;
-        var left = $(context.parent).offset().left;
+        var top = $(parent).offset().top + parent.offsetHeight + 5;
+        if (position == "top") {
+            top = $(parent).offset().top - base.offsetHeight - 5;
+        }
+        var left = $(parent).offset().left;
         var itemwidth = context.item.offsetWidth + parseInt(getStyle(base, "paddingLeft"), 10) + parseInt(getStyle(base, "paddingRight"), 10);
-        if (left + itemwidth + 10 > $(window).width())
-            left = $(window).width() - 10 - itemwidth;
+        if (left + itemwidth + 10 > $(window).width()) left = $(window).width() - 10 - itemwidth;
         base.style.top = top + "px";
         base.style.left = left + "px";
-        if (context.parent.context != undefined && context.parent.context.events != undefined)
-            context.parent.context.events.trigger("flyoutShow", context);
+
+        // showed
+        if (parent.context != undefined && parent.context.events != undefined) parent.context.events.trigger("flyout_showed", parent, {
+            flyout: base.children[0]
+        });
         window.addEventListener("resize", windowresizing, false);
     };
-    var flyout_init = function (obj, flyout) {
+    var flyout_init = function flyout_init(obj, flyout) {
         var item = flyout.cloneNode(true);
         button_init(item);
         checkbox_init(item);
@@ -88,12 +154,12 @@
             parent: obj,
             item: item,
             showFlyout: flyout_show,
-            hideFlyout: flyout_hide,
+            hideFlyout: flyout_hide
         };
+        item.context = context;
         obj.context.flyout = context;
-
-    }
-    var flyout_global_init = function () {
+    };
+    var flyout_global_init = function flyout_global_init() {
         var layer = document.createElement("div");
         dataset_helper.set(layer, "control", "flyoutlayer");
         var cover = document.createElement("div");
@@ -104,64 +170,57 @@
         layer.appendChild(cover);
         layer.appendChild(base);
         document.body.appendChild(layer);
-    }
+    };
     //#endregion
 
     //#region Button
-    var button_set_enabled = function (isenable) {
+    var button_set_enabled = function button_set_enabled(isenable) {
         var context = this;
         var button = context.self;
         dataset_helper.set(button, "enabled", isenable);
-    }
-    var button_click = function () {
+    };
+    var button_click = function button_click() {
         var button = this;
-        if (dataset_helper.read(button, "enabled") == false || dataset_helper.read(button, "enabled") == "false")
-            return;
-        if (button.context.flyout != undefined)
-            button.context.flyout.showFlyout();
-        button.context.events.trigger("click", button);
-    }
-    var button_init = function (parent) {
+        if (dataset_helper.read(button, "enabled") == false || dataset_helper.read(button, "enabled") == "false") return;
+        if (button.context.flyout != undefined) button.context.flyout.showFlyout();
+        button.context.events.trigger("click", button, {});
+    };
+    var button_init = function button_init(parent) {
         $(parent).find("div[data-control='button']").each(function () {
             var button = this;
-            if (button.hasAttribute("tabindex") == false)
-                button.setAttribute("tabindex", -1);
+            if (button.hasAttribute("tabindex") == false) button.setAttribute("tabindex", -1);
             button.context = {
                 self: button,
-                events: new HandlerBase(),
-                set_enabled: button_set_enabled,
+                events: new handler_base(),
+                set_enabled: button_set_enabled
             };
             $(button).click(button_click);
             var span = document.createElement("span");
             span.innerText = dataset_helper.read(button, "text");
             var flyouts = $(button).children("div[data-control='flyout']");
-            if (flyouts.length > 0)
-                flyout_init(button, flyouts[0]);
+            if (flyouts.length > 0) flyout_init(button, flyouts[0]);
 
             button.innerHTML = "";
             button.appendChild(span);
-
         });
-    }
+    };
 
     //#endregion
 
-    //#region ListBox 
-    var listbox_set_selected = function (i) {
+    //#region ListBox
+    var listbox_set_selected = function listbox_set_selected(i) {
         var box = this.self;
         var selected = box.context.selectedItem();
-        if (selected != undefined)
-            $(selected).removeClass("selected");
-        if (i == -1)
-            dataset_helper.set(box, "selectedindex", -1);
-        else if (i < 0 || i >= box.children[0].children.length) return;
+        if (selected != undefined) $(selected).removeClass("selected");
+        if (i == -1) dataset_helper.set(box, "selectedindex", -1);else if (i < 0 || i >= box.children[0].children.length) return;
 
         dataset_helper.set(box, "selectedindex", i);
         $(box.children[0].children[i]).addClass("selected");
-        if ($(box).hasClass("expand") == false)
-            box.children[0].style.top = "-" + (box.children[0].children[i].offsetTop) + "px";
+        if ($(box).hasClass("expand") == false) box.children[0].style.top = "-" + box.children[0].children[i].offsetTop + "px";
+
+        this.events.trigger("selection_changed", box, { action: "programmatic", selected_index: i, selected_item: box.children[0].children[i] });
     };
-    var listbox_span_click = function (e) {
+    var listbox_span_click = function listbox_span_click(e) {
         var span = e.currentTarget;
         var listbox_div = span.parentElement;
         var listbox = listbox_div.parentElement;
@@ -173,29 +232,32 @@
             }
         }
         var lindex = dataset_helper.read(listbox, "selectedindex");
-        if (lindex != undefined)
-            lindex = parseInt(lindex, 10);
-        else
-            lindex = -1;
-        if (lindex >= 0)
-            $(listbox_div.children[lindex]).removeClass("selected");
+        if (lindex != undefined) lindex = parseInt(lindex, 10);else lindex = -1;
+        if (lindex == index) {
+            listbox.blur();
+            return;
+        };
+
+        if (lindex >= 0) $(listbox_div.children[lindex]).removeClass("selected");
         dataset_helper.set(listbox, "selectedindex", index);
         $(listbox_div.children[index]).addClass("selected");
         listbox.blur();
+        listbox.context.events.trigger("selection_changed", listbox, {
+            action: "user_selection",
+            selected_index: index,
+            selected_item: listbox_div.children[index]
+        });
     };
-    var listbox_collp = function (e) {
+    var listbox_collp = function listbox_collp(e) {
         var b = e.currentTarget;
         var index = parseInt(dataset_helper.read(b, "selectedindex"));
         $(b).removeClass("expand");
-        if (index >= 0)
-            b.children[0].style.top = "-" + (b.children[0].children[index].offsetTop) + "px";
-        else
-            b.children[0].style.top = "2.1em";
+        if (index >= 0) b.children[0].style.top = "-" + b.children[0].children[index].offsetTop + "px";else b.children[0].style.top = "2.1em";
         b.style.height = "2.1em";
         var spans = $($(b).children()[0]).children();
         spans.unbind("click");
     };
-    var listbox_expand = function () {
+    var listbox_expand = function listbox_expand() {
         var box = this;
         box.children[0].style.top = 0;
         $(box).addClass("expand");
@@ -203,25 +265,24 @@
         var spans = $($(box).children()[0]).children();
         spans.click(listbox_span_click);
     };
-    var listbox_cover_click = function () {
+    var listbox_cover_click = function listbox_cover_click() {
         var cover = this;
         var box = cover.parentElement;
         $(box).focus();
     };
-    var listbox_selectedIndex = function () {
+    var listbox_selectedIndex = function listbox_selectedIndex() {
         var box = this.self;
         return dataset_helper.read(box, "selectedindex");
     };
-    var listbox_selectedItem = function () {
+    var listbox_selectedItem = function listbox_selectedItem() {
         var box = this.self;
         var selected = parseInt(this.selectedIndex());
         return box.children[0].children[selected];
     };
-    var listbox_init = function (parent) {
+    var listbox_init = function listbox_init(parent) {
         $(parent).find("div[data-control='listbox']").each(function () {
             var box = this;
-            if (box.hasAttribute("tabindex") == false)
-                box.setAttribute("tabindex", -1);
+            if (box.hasAttribute("tabindex") == false) box.setAttribute("tabindex", -1);
 
             var childs = box.children;
             var div = document.createElement("div");
@@ -229,13 +290,9 @@
             var record = dataset_helper.read(box, "selecteditem");
             var findrecord = undefined;
             var i = 0;
-            var span;
             while (box.children.length > 0) {
-                if (childs[0].innerText == record)
-                    findrecord = i;
-                span = childs[0].cloneNode(true);
-                span.innerText = dataset_helper.read(span, "text");
-                div.appendChild(span);
+                if (childs[0].innerText == record) findrecord = i;
+                div.appendChild(childs[0].cloneNode(true));
                 box.removeChild(childs[0]);
                 i++;
             }
@@ -245,18 +302,14 @@
             box.appendChild(div);
 
             if (dataset_helper.read(box, "selectedindex") == undefined) {
-                if (record != undefined && findrecord != undefined)
-                    dataset_helper.set(box, "selectedindex", findrecord);
-                else
-                    dataset_helper.set(box, "selectedindex", -1);
+                if (record != undefined && findrecord != undefined) dataset_helper.set(box, "selectedindex", findrecord);else dataset_helper.set(box, "selectedindex", -1);
             }
 
             var index = parseInt(dataset_helper.read(box, "selectedindex"));
             if (index >= 0 && index < div.children.length) {
-                div.style.top = "-" + (div.children[index].offsetTop) + "px";
+                div.style.top = "-" + div.children[index].offsetTop + "px";
                 $(div.children[index]).addClass("selected");
-            }
-            else {
+            } else {
                 dataset_helper.set(box, "selectedindex", -1);
                 div.style.top = "2.1em";
             }
@@ -268,42 +321,42 @@
 
             box.context = {
                 self: box,
-                selectedItem: listbox_selectedItem,
-                selectedIndex: listbox_selectedIndex,
-                set_selected: listbox_set_selected,
+                selected_item: listbox_selectedItem,
+                selected_index: listbox_selectedIndex,
+                set_selection: listbox_set_selected,
+                events: new handler_base()
             };
 
             $(box).focus(listbox_expand);
             $(box).blur(listbox_collp);
         });
-    }
+    };
     //#endregion
 
     //#region Select
-    var select_set_selected = function (i) {
+    var select_set_selected = function select_set_selected(i) {
         var select = this.self;
         var selected = select.context.selectedItem();
-        if (selected != undefined)
-            $(selected).removeClass("selected");
-        if (i == -1)
-            dataset_helper.set(select, "selectedindex", -1);
-        else if (i < 0 || i >= select.children[0].children[0].children.length) return;
+        if (selected != undefined) $(selected).removeClass("selected");
+        if (i == -1) dataset_helper.set(select, "selectedindex", -1);else if (i < 0 || i >= select.children[0].children[0].children.length) return;
 
         dataset_helper.set(select, "selectedindex", i);
         $(select.children[0].children[0].children[i]).addClass("selected");
-        if ($(select).hasClass("expand"))
-            select.children[0].scrollTop = select.children[0].children[0].children[i].offsetTop;
-        else
-            select.children[0].children[0].style.top = "-" + (select.children[0].children[0].children[i].offsetTop) + "px";
+        if ($(select).hasClass("expand")) select.children[0].scrollTop = select.children[0].children[0].children[i].offsetTop;else select.children[0].children[0].style.top = "-" + select.children[0].children[0].children[i].offsetTop + "px";
+
+        select.context.events.trigger("selection_changed", select, {
+            action: "programmatic",
+            selected_index: i,
+            selected_item: select.children[0].children[0].children[i]
+        });
     };
-    var select_selectedItem = function () {
+    var select_selectedItem = function select_selectedItem() {
         var select = this.self;
         var selected = parseInt(this.selectedIndex());
-        if (selected == -1)
-            return undefined;
+        if (selected == -1) return undefined;
         return select.children[0].children[0].children[selected];
     };
-    var select_span_click = function (e) {
+    var select_span_click = function select_span_click(e) {
         var span = e.currentTarget;
         var select_div = span.parentElement.parentElement;
         var select = select_div.parentElement;
@@ -315,52 +368,47 @@
             }
         }
         var lindex = dataset_helper.read(select, "selectedindex");
-        if (lindex != undefined)
-            lindex = parseInt(lindex, 10);
-        else
-            lindex = -1;
-        if (lindex >= 0)
-            $(select_div.children[0].children[lindex]).removeClass("selected");
+        if (lindex != undefined) lindex = parseInt(lindex, 10);else lindex = -1;
+
+        if (lindex == index) {
+            select.blur();
+            return;
+        }
+
+        if (lindex >= 0) $(select_div.children[0].children[lindex]).removeClass("selected");
 
         dataset_helper.set(select, "selectedindex", index);
         $(select_div.children[0].children[index]).addClass("selected");
         select.blur();
-        if (index != lindex)
-            select.context.events.trigger("changed", select);
+        select.context.events.trigger("selection_changed", select, {
+            action: "user_selection",
+            selected_index: index,
+            selected_item: select_div.children[0].children[index]
+        });
     };
-    var select_focus = function () {
+    var select_focus = function select_focus() {
         var select = this;
         select.children[0].children[0].style.top = "0";
         var height = select.children[0].children[0].offsetHeight;
-        if (height > 200)
-            height = 200;
+        if (height > 200) height = 200;
         select.children[0].style.height = height + "px";
         var spans = $(select.children[0].children[0]).children();
         spans.click(select_span_click);
         var index = parseInt(dataset_helper.read(select, "selectedindex"));
-        if (index < 0 || isNaN(index))
-            index = 0;
-        if (index > spans.length - 4)
-            index = spans.length - 1;
-        else
-            index = index - 2;
-        if (index < 0)
-            index = 0;
+        if (index < 0 || isNaN(index)) index = 0;
+        if (index > spans.length - 4) index = spans.length - 1;else index = index - 2;
+        if (index < 0) index = 0;
         $(select).addClass("expand");
         $(select).addClass("expandimmeditly");
         setTimeout(function () {
             select.children[0].scrollTop = select.children[0].children[0].children[index].offsetTop;
         }, 200);
-
-    }
-    var select_collpase = function () {
+    };
+    var select_collpase = function select_collpase() {
         var select = this;
         var index = parseInt(dataset_helper.read(select, "selectedindex"));
         select.children[0].scrollTop = 0;
-        if (index >= 0)
-            select.children[0].children[0].style.top = "-" + (select.children[0].children[0].children[index].offsetTop) + "px";
-        else
-            select.children[0].children[0].style.top = "0";
+        if (index >= 0) select.children[0].children[0].style.top = "-" + select.children[0].children[0].children[index].offsetTop + "px";else select.children[0].children[0].style.top = "0";
         select.children[0].style.height = select.offsetHeight + "px";
 
         var spans = $(select.children[0].children[0]).children();
@@ -369,12 +417,11 @@
         setTimeout(function () {
             $(select).removeClass("expand");
         }, 200);
-    }
-    var select_init = function (parent) {
+    };
+    var select_init = function select_init(parent) {
         $(parent).find("div[data-control='select']").each(function () {
             var select = this;
-            if (select.hasAttribute("tabindex") == false)
-                select.setAttribute("tabindex", -1);
+            if (select.hasAttribute("tabindex") == false) select.setAttribute("tabindex", -1);
 
             var childs = select.children;
             var div = document.createElement("div");
@@ -383,21 +430,14 @@
             var findrecord = undefined;
 
             if (dataset_helper.read(select, "selectedindex") == undefined) {
-                if (record != undefined && findrecord != undefined)
-                    dataset_helper.set(select, "selectedindex", findrecord);
-                else
-                    dataset_helper.set(select, "selectedindex", -1);
+                if (record != undefined && findrecord != undefined) dataset_helper.set(select, "selectedindex", findrecord);else dataset_helper.set(select, "selectedindex", -1);
             }
             var index = parseInt(dataset_helper.read(select, "selectedindex"));
 
             var i = 0;
-            var span;
             while (select.children.length > 0) {
-                if (childs[0].innerText == record)
-                    findrecord = i;
-                span = childs[0].cloneNode(true);
-                span.innerText = dataset_helper.read(span, "text");
-                cdiv.appendChild(span);
+                if (childs[0].innerText == record) findrecord = i;
+                cdiv.appendChild(childs[0].cloneNode(true));
                 select.removeChild(childs[0]);
                 i++;
             }
@@ -409,10 +449,9 @@
 
             select.children[0].scrollTop = 0;
             if (index >= 0 && index < cdiv.children.length) {
-                select.children[0].children[0].style.top = "-" + (select.children[0].children[0].children[index].offsetTop) + "px";
+                select.children[0].children[0].style.top = "-" + select.children[0].children[0].children[index].offsetTop + "px";
                 $(select.children[0].children[0].children[index]).addClass("selected");
-            }
-            else {
+            } else {
                 dataset_helper.set(select, "selectedindex", -1);
                 select.children[0].children[0].style.top = "0";
             }
@@ -425,54 +464,55 @@
                 self: select,
                 selectedItem: select_selectedItem,
                 selectedIndex: listbox_selectedIndex,
-                set_selected: select_set_selected,
-                events: new HandlerBase()
+                set_selection: select_set_selected,
+                events: new handler_base()
             };
 
             $(select).focus(select_focus);
             $(select).blur(select_collpase);
         });
-    }
+    };
     //#endregion
 
     //#region Checkbox
-    var checkbox_getchecked = function () {
+    var checkbox_getchecked = function checkbox_getchecked() {
         var context = this;
         var checkbox = context.self;
         var ch = dataset_helper.read(checkbox, "checked");
-        if (ch == undefined)
-            return false;
-        else if (ch == "true")
-            return true;
-        else
-            return false;
+        if (ch == undefined) return false;else return true;
     };
-    var checkbox_setchecked = function (checked) {
+    var checkbox_setchecked = function checkbox_setchecked(checked) {
         var context = this;
         var checkbox = context.self;
         var innerbox = checkbox.children[0].children[0];
         if (checked == false) {
             innerbox.checked = false;
             dataset_helper.set(checkbox, "checked", false);
-        }
-        else {
+        } else {
             innerbox.checked = true;
             dataset_helper.set(checkbox, "checked", true);
         }
-    }
-    var checkbox_click = function (e) {
+        box.context.events.trigger("changed", checkbox, {
+            action: "programmatic",
+            checked: innerbox.checked
+        });
+    };
+    var checkbox_click = function checkbox_click(e) {
         var box = e.currentTarget;
         var checkbox = box.children[0].children[0];
         if (checkbox.checked) {
             checkbox.checked = false;
             dataset_helper.set(box, "checked", false);
-        }
-        else {
+        } else {
             checkbox.checked = true;
             dataset_helper.set(box, "checked", true);
         }
-    }
-    var checkbox_init = function (parent) {
+        box.context.events.trigger("changed", box, {
+            action: "user_selection",
+            checked: checkbox.checked
+        });
+    };
+    var checkbox_init = function checkbox_init(parent) {
         var holder;
         var msg;
         var msgspan;
@@ -480,8 +520,7 @@
         var checkbox;
         $(parent).find("div[data-control='checkbox']").each(function () {
             var div = this;
-            if (div.hasAttribute("tabindex") == false)
-                div.setAttribute("tabindex", -1);
+            if (div.hasAttribute("tabindex") == false) div.setAttribute("tabindex", -1);
             div.innerHTML = "";
             holder = document.createElement("div");
             msg = document.createElement("div");
@@ -500,52 +539,54 @@
             div.addEventListener("click", checkbox_click, false);
             if (dataset_helper.read(div, "checked") != undefined && (dataset_helper.read(div, "checked") == true || dataset_helper.read(div, "checked") == "true")) {
                 checkbox.checked = true;
-            }
-            else {
+            } else {
                 checkbox.checked = false;
                 dataset_helper.set(div, "checked", false);
             }
             div.context = {
-                setChecked: checkbox_setchecked,
+                set_checked: checkbox_setchecked,
                 self: div,
-                events: new HandlerBase(),
+                events: new handler_base(),
                 checked: checkbox_getchecked
             };
         });
-    }
+    };
     //#endregion
 
     //#region DatePicker
-    var datepicker_init = function (parent) {
+    var datepicker_init = function datepicker_init(parent) {
         $(parent).find("div[data-control='datepicker']").each(function () {
             var picker = this;
-            if (picker.hasAttribute("tabindex") == false)
-                picker.setAttribute("tabindex", -1);
+            if (picker.hasAttribute("tabindex") == false) picker.setAttribute("tabindex", -1);
             picker.innerHTML = "";
             $(picker).focus(datepicker_focus);
             picker.context = {
-                setDate: datepicker_setdate,
+                set_date: datepicker_setdate,
+                get_date: datepicker_getdate,
                 self: picker,
-                events: new HandlerBase()
+                events: new handler_base()
             };
 
             var mindate = dataset_helper.read(picker, "mindate");
             var maxdate = dataset_helper.read(picker, "maxdate");
             var dateval = dataset_helper.read(picker, "datevalue");
             var date = new Date();
-            if (mindate == null || mindate == undefined)
-                mindate = "1990/01/01";
-            if (maxdate == null || maxdate == undefined)
-                maxdate = "2100/12/31";
-            if (dateval == null || dateval == undefined)
-                dateval = date.getFullYear() + "/" + (date.getMonth() + 1) + "/" + date.getDate();
+            if (mindate == null || mindate == undefined) mindate = "1990/01/01";
+            if (maxdate == null || maxdate == undefined) maxdate = "2100/12/31";
+            if (dateval == null || dateval == undefined) dateval = date.getFullYear() + "/" + (date.getMonth() + 1) + "/" + date.getDate();
 
-            var minresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(mindate);
-            var maxresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(maxdate);
-            var valresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(dateval);
-            var minyear = 1990, minmonth = 1, minday = 1;
-            var maxyear = 2100, maxmonth = 12, maxday = 31;
-            var valyear = date.getFullYear(), valmonth = date.getMonth() + 1, valday = date.getDate();
+            var minresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(mindate);
+            var maxresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(maxdate);
+            var valresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(dateval);
+            var minyear = 1990,
+                minmonth = 1,
+                minday = 1;
+            var maxyear = 2100,
+                maxmonth = 12,
+                maxday = 31;
+            var valyear = date.getFullYear(),
+                valmonth = date.getMonth() + 1,
+                valday = date.getDate();
 
             if (minresult != null) {
                 minyear = parseInt(minresult["1"], 10);
@@ -577,10 +618,8 @@
             mindate = new Date(minyear, minmonth - 1, minday);
             maxdate = new Date(maxyear, maxmonth - 1, maxday);
             dateval = new Date(valyear, valmonth - 1, valday);
-            if (mindate.getTime() > dateval.getTime())
-                dateval.setTime(mindate.getTime());
-            if (maxdate.getTime() < dateval.getTime())
-                dateval.setTime(maxdate.getTime());
+            if (mindate.getTime() > dateval.getTime()) dateval.setTime(mindate.getTime());
+            if (maxdate.getTime() < dateval.getTime()) dateval.setTime(maxdate.getTime());
 
             var div;
             div = document.createElement("div");
@@ -598,7 +637,7 @@
             cdiv = document.createElement("div");
             cdiv.className = "input-date-container-itemscrollview";
             $(cdiv).addClass("input-date-container-year");
-            for (var i = mindate.getFullYear() ; i <= maxdate.getFullYear() ; i++) {
+            for (var i = mindate.getFullYear(); i <= maxdate.getFullYear(); i++) {
                 var p = document.createElement("p");
                 if (i == dateval.getFullYear()) {
                     p.className = "selected";
@@ -613,10 +652,8 @@
             $(cdiv).addClass("input-date-container-month");
             var monthbegin = 1;
             var monthend = 12;
-            if (mindate.getFullYear() == dateval.getFullYear())
-                monthbegin = mindate.getMonth() + 1;
-            if (maxdate.getFullYear() == dateval.getFullYear())
-                monthend = maxdate.getMonth() + 1;
+            if (mindate.getFullYear() == dateval.getFullYear()) monthbegin = mindate.getMonth() + 1;
+            if (maxdate.getFullYear() == dateval.getFullYear()) monthend = maxdate.getMonth() + 1;
             for (var i = monthbegin; i <= monthend; i++) {
                 var p = document.createElement("p");
                 if (i == dateval.getMonth() + 1) {
@@ -632,10 +669,8 @@
             $(cdiv).addClass("input-date-container-date");
             var daybegin = 1;
             var dayend = new Date(dateval.getFullYear(), dateval.getMonth() + 1, 0).getDate();
-            if (mindate.getFullYear() == dateval.getFullYear() && mindate.getMonth() == dateval.getMonth())
-                daybegin = mindate.getDate();
-            if (maxdate.getFullYear() == dateval.getFullYear() && maxdate.getMonth() == dateval.getMonth())
-                dayend = maxdate.getDate();
+            if (mindate.getFullYear() == dateval.getFullYear() && mindate.getMonth() == dateval.getMonth()) daybegin = mindate.getDate();
+            if (maxdate.getFullYear() == dateval.getFullYear() && maxdate.getMonth() == dateval.getMonth()) dayend = maxdate.getDate();
             for (var i = daybegin; i <= dayend; i++) {
                 var p = document.createElement("p");
                 if (i == dateval.getDate()) {
@@ -657,38 +692,41 @@
             dataset_helper.set(picker, "maxdate", maxdate.getFullYear() + "/" + (maxdate.getMonth() + 1) + "/" + maxdate.getDate());
             picker.context.events.trigger("change", picker);
         });
-    }
-    var datepicker_year_clicked = function () {
+    };
+    var datepicker_year_clicked = function datepicker_year_clicked() {
         var yearp = this;
-        if (yearp.className == "selected")
-            return;
+        if (yearp.className == "selected") return;
         var container = yearp.parentElement.parentElement;
         var datepicker = yearp.parentElement.parentElement.parentElement;
         var mindate = dataset_helper.read(datepicker, "mindate");
         var maxdate = dataset_helper.read(datepicker, "maxdate");
         var dateval = dataset_helper.read(datepicker, "datevalue");
-        var minresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(mindate);
-        var maxresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(maxdate);
-        var valresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(dateval);
-        var minyear = parseInt(minresult["1"], 10), minmonth = parseInt(minresult["2"], 10), minday = parseInt(minresult["5"], 10);
-        var maxyear = parseInt(maxresult["1"], 10), maxmonth = parseInt(maxresult["2"], 10), maxday = parseInt(maxresult["5"], 10);
-        var valyear = parseInt(valresult["1"], 10), valmonth = parseInt(valresult["2"], 10), valday = parseInt(valresult["5"], 10);
+        var minresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(mindate);
+        var maxresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(maxdate);
+        var valresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(dateval);
+        var minyear = parseInt(minresult["1"], 10),
+            minmonth = parseInt(minresult["2"], 10),
+            minday = parseInt(minresult["5"], 10);
+        var maxyear = parseInt(maxresult["1"], 10),
+            maxmonth = parseInt(maxresult["2"], 10),
+            maxday = parseInt(maxresult["5"], 10);
+        var valyear = parseInt(valresult["1"], 10),
+            valmonth = parseInt(valresult["2"], 10),
+            valday = parseInt(valresult["5"], 10);
         var yearct = container.children[0];
         var monthct = container.children[1];
         var datect = container.children[2];
         for (var i = 0; i < yearct.children.length; i++) {
-            if (yearct.children[i].className == "selected")
-                yearct.children[i].className = "";
+            if (yearct.children[i].className == "selected") yearct.children[i].className = "";
         }
         yearp.className = "selected";
         var newyear = parseInt(yearp.innerText, 10);
         monthct.innerHTML = "";
         datect.innerHTML = "";
-        var monthbegin = 1, monthend = 12;
-        if (newyear == minyear)
-            monthbegin = minmonth;
-        if (newyear == maxyear)
-            monthend = maxmonth;
+        var monthbegin = 1,
+            monthend = 12;
+        if (newyear == minyear) monthbegin = minmonth;
+        if (newyear == maxyear) monthend = maxmonth;
         for (var i = monthbegin; i <= monthend; i++) {
             var p = document.createElement("p");
             if (i == monthbegin) {
@@ -699,11 +737,10 @@
             monthct.appendChild(p);
         }
         monthct.scrollTop = 0;
-        var daybegin = 1, dayend = new Date(newyear, monthbegin, 0).getDate();
-        if (newyear == minyear && minmonth == monthbegin)
-            daybegin = minday;
-        if (newyear == maxyear && monthbegin == maxmonth)
-            dayend = maxday;
+        var daybegin = 1,
+            dayend = new Date(newyear, monthbegin, 0).getDate();
+        if (newyear == minyear && minmonth == monthbegin) daybegin = minday;
+        if (newyear == maxyear && monthbegin == maxmonth) dayend = maxday;
         datect.innerHTML = "";
         for (var i = daybegin; i <= dayend; i++) {
             var p = document.createElement("p");
@@ -716,36 +753,42 @@
         }
         dataset_helper.set(datepicker, "datevalue", newyear + "/" + monthbegin + "/" + daybegin);
         datepicker.children[0].children[0].innerText = newyear + " 年 " + monthbegin + " 月 " + daybegin + " 日";
-        datepicker.context.events.trigger("change", datepicker);
-    }
-    var datepicker_month_clicked = function () {
+        datepicker.context.events.trigger("changed", datepicker, {
+            action: "user_selection",
+            date: { year: valyear, month: monthbegin, day: daybegin }
+        });
+    };
+    var datepicker_month_clicked = function datepicker_month_clicked() {
         var monthp = this;
-        if (monthp.className == "selected")
-            return;
+        if (monthp.className == "selected") return;
         var container = monthp.parentElement.parentElement;
         var datepicker = monthp.parentElement.parentElement.parentElement;
         var mindate = dataset_helper.read(datepicker, "mindate");
         var maxdate = dataset_helper.read(datepicker, "maxdate");
         var dateval = dataset_helper.read(datepicker, "datevalue");
-        var minresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(mindate);
-        var maxresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(maxdate);
-        var valresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(dateval);
-        var minyear = parseInt(minresult["1"], 10), minmonth = parseInt(minresult["2"], 10), minday = parseInt(minresult["5"], 10);
-        var maxyear = parseInt(maxresult["1"], 10), maxmonth = parseInt(maxresult["2"], 10), maxday = parseInt(maxresult["5"], 10);
-        var valyear = parseInt(valresult["1"], 10), valmonth = parseInt(valresult["2"], 10), valday = parseInt(valresult["5"], 10);
+        var minresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(mindate);
+        var maxresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(maxdate);
+        var valresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(dateval);
+        var minyear = parseInt(minresult["1"], 10),
+            minmonth = parseInt(minresult["2"], 10),
+            minday = parseInt(minresult["5"], 10);
+        var maxyear = parseInt(maxresult["1"], 10),
+            maxmonth = parseInt(maxresult["2"], 10),
+            maxday = parseInt(maxresult["5"], 10);
+        var valyear = parseInt(valresult["1"], 10),
+            valmonth = parseInt(valresult["2"], 10),
+            valday = parseInt(valresult["5"], 10);
         var monthct = container.children[1];
         var datect = container.children[2];
         for (var i = 0; i < monthct.children.length; i++) {
-            if (monthct.children[i].className == "selected")
-                monthct.children[i].className = "";
+            if (monthct.children[i].className == "selected") monthct.children[i].className = "";
         }
         monthp.className = "selected";
         var newmonth = parseInt(monthp.innerText, 10);
-        var daybegin = 1, dayend = new Date(valyear, newmonth, 0).getDate();
-        if (valyear == minyear && minmonth == newmonth)
-            daybegin = minday;
-        if (valyear == maxyear && newmonth == maxmonth)
-            dayend = maxday;
+        var daybegin = 1,
+            dayend = new Date(valyear, newmonth, 0).getDate();
+        if (valyear == minyear && minmonth == newmonth) daybegin = minday;
+        if (valyear == maxyear && newmonth == maxmonth) dayend = maxday;
         datect.innerHTML = "";
         for (var i = daybegin; i <= dayend; i++) {
             var p = document.createElement("p");
@@ -759,63 +802,67 @@
         dataset_helper.set(datepicker, "datevalue", valyear + "/" + newmonth + "/" + daybegin);
         datect.scrollTop = 0;
         datepicker.children[0].children[0].innerText = valyear + " 年 " + newmonth + " 月 " + daybegin + " 日";
-        datepicker.context.events.trigger("change", datepicker);
-    }
-    var datepicker_day_clicked = function () {
+        datepicker.context.events.trigger("changed", datepicker, {
+            action: "user_selection",
+            date: { year: valyear, month: newmonth, day: daybegin }
+        });
+    };
+    var datepicker_day_clicked = function datepicker_day_clicked() {
         var datep = this;
-        if (datep.className == "selected")
-            return;
+        if (datep.className == "selected") return;
         var container = datep.parentElement.parentElement;
         var datepicker = datep.parentElement.parentElement.parentElement;
         var dateval = dataset_helper.read(datepicker, "datevalue");
-        var valresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(dateval);
-        var valyear = parseInt(valresult["1"], 10), valmonth = parseInt(valresult["2"], 10), valday = parseInt(valresult["5"], 10);
+        var valresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(dateval);
+        var valyear = parseInt(valresult["1"], 10),
+            valmonth = parseInt(valresult["2"], 10),
+            valday = parseInt(valresult["5"], 10);
         var datect = container.children[2];
         for (var i = 0; i < datect.children.length; i++) {
-            if (datect.children[i].className == "selected")
-                datect.children[i].className = "";
+            if (datect.children[i].className == "selected") datect.children[i].className = "";
         }
         datep.className = "selected";
         dataset_helper.set(datepicker, "datevalue", valyear + "/" + valmonth + "/" + datep.innerText);
         datepicker.children[0].children[0].innerText = valyear + " 年 " + valmonth + " 月 " + datep.innerText + " 日";
-        datepicker.context.events.trigger("change", datepicker);
-    }
-    var datepicker_focus = function () {
+        datepicker.context.events.trigger("changed", datepicker, {
+            action: "user_selection",
+            date: { year: valyear, month: valmonth, day: datep.innerText }
+        });
+    };
+    var datepicker_focus = function datepicker_focus() {
         var picker = this;
         var container = picker.children[1];
         var yearct = container.children[0];
         var monthct = container.children[1];
         var datect = container.children[2];
-        for (var i = 0; i < yearct.children.length; i++)
-            if ($(yearct.children[i]).hasClass("selected"))
-                yearct.scrollTop = yearct.children[i].offsetTop;
-        for (var i = 0; i < monthct.children.length; i++)
-            if ($(monthct.children[i]).hasClass("selected"))
-                monthct.scrollTop = monthct.children[i].offsetTop;
-        for (var i = 0; i < datect.children.length; i++)
-            if ($(datect.children[i]).hasClass("selected"))
-                datect.scrollTop = datect.children[i].offsetTop;
-    }
-    var datepicker_cover_click = function () {
+        for (var i = 0; i < yearct.children.length; i++) if ($(yearct.children[i]).hasClass("selected")) yearct.scrollTop = yearct.children[i].offsetTop;
+        for (var i = 0; i < monthct.children.length; i++) if ($(monthct.children[i]).hasClass("selected")) monthct.scrollTop = monthct.children[i].offsetTop;
+        for (var i = 0; i < datect.children.length; i++) if ($(datect.children[i]).hasClass("selected")) datect.scrollTop = datect.children[i].offsetTop;
+    };
+    var datepicker_cover_click = function datepicker_cover_click() {
         var cover = this;
         var picker = cover.parentElement;
         $(picker).focus();
-    }
-    var datepicker_setdate = function (date) {
+    };
+    var datepicker_setdate = function datepicker_setdate(date) {
         var i = 0;
         var picker = this.self;
         var mindate = dataset_helper.read(picker, "mindate");
         var maxdate = dataset_helper.read(picker, "maxdate");
-        if (mindate == null || mindate == undefined)
-            mindate = "1990/01/01";
-        if (maxdate == null || maxdate == undefined)
-            maxdate = "2100/12/31";
+        if (mindate == null || mindate == undefined) mindate = "1990/01/01";
+        if (maxdate == null || maxdate == undefined) maxdate = "2100/12/31";
 
-        var minresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(mindate);
-        var maxresult = (/^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g).exec(maxdate);
-        var minyear = 1990, minmonth = 1, minday = 1;
-        var maxyear = 2100, maxmonth = 12, maxday = 31;
-        var valyear = date.getFullYear(), valmonth = date.getMonth() + 1, valday = date.getDate();
+        var minresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(mindate);
+        var maxresult = /^(\d{4})\/((0?[1-9])|(1[0-2]))\/((0?[1-9])|(1\d)|(2\d)|(3[0-1]))$/g.exec(maxdate);
+        var minyear = 1990,
+            minmonth = 1,
+            minday = 1;
+        var maxyear = 2100,
+            maxmonth = 12,
+            maxday = 31;
+        var valyear = date.getFullYear(),
+            valmonth = date.getMonth() + 1,
+            valday = date.getDate();
 
         if (minresult != null) {
             minyear = parseInt(minresult["1"], 10);
@@ -839,10 +886,8 @@
         mindate = new Date(minyear, minmonth - 1, minday);
         maxdate = new Date(maxyear, maxmonth - 1, maxday);
         var dateval = date;
-        if (mindate.getTime() > dateval.getTime())
-            return false;
-        if (maxdate.getTime() < dateval.getTime())
-            return false;
+        if (mindate.getTime() > dateval.getTime()) return false;
+        if (maxdate.getTime() < dateval.getTime()) return false;
 
         var container = picker.children[1];
         var yearct = container.children[0];
@@ -850,8 +895,7 @@
         var datect = container.children[2];
         var index = 0;
         for (var i = 0; i < yearct.children.length; i++) {
-            if (yearct.children[i].className == "selected")
-                yearct.children[i].className = "";
+            if (yearct.children[i].className == "selected") yearct.children[i].className = "";
             if (yearct.children[i].innerText == valyear.toString()) {
                 yearct.children[i].className = "selected";
                 index = i;
@@ -861,11 +905,10 @@
 
         monthct.innerHTML = "";
         datect.innerHTML = "";
-        var monthbegin = 1, monthend = 12;
-        if (valyear == minyear)
-            monthbegin = minmonth;
-        if (valyear == maxyear)
-            monthend = maxmonth;
+        var monthbegin = 1,
+            monthend = 12;
+        if (valyear == minyear) monthbegin = minmonth;
+        if (valyear == maxyear) monthend = maxmonth;
         index = monthbegin;
         for (var i = monthbegin; i <= monthend; i++) {
             var p = document.createElement("p");
@@ -879,11 +922,10 @@
         }
         monthct.scrollTop = monthct.children[index - monthbegin].offsetTop;
 
-        var daybegin = 1, dayend = new Date(valyear, valmonth, 0).getDate();
-        if (valyear == minyear && valmonth == monthbegin)
-            daybegin = minday;
-        if (valyear == maxyear && valmonth == maxmonth)
-            dayend = maxday;
+        var daybegin = 1,
+            dayend = new Date(valyear, valmonth, 0).getDate();
+        if (valyear == minyear && valmonth == monthbegin) daybegin = minday;
+        if (valyear == maxyear && valmonth == maxmonth) dayend = maxday;
         index = daybegin;
         for (var i = daybegin; i <= dayend; i++) {
             var p = document.createElement("p");
@@ -899,12 +941,28 @@
 
         dataset_helper.set(picker, "datevalue", valyear + "/" + valmonth + "/" + valday);
         picker.children[0].children[0].innerText = valyear + " 年 " + valmonth + " 月 " + valday + " 日";
-        picker.context.events.trigger("change", picker);
+        picker.context.events.trigger("changed", picker, {
+            action: "programmatic",
+            date: { year: valyear, month: valmonth, day: valday }
+        });
         return true;
-    }
+    };
+    var datepicker_getdate = function datepicker_getdate() {
+        var picker = this.self;
+        var date = dataset_helper.read(picker, "datevalue");
+        var dates = date.split("/");
+        var valyear = parseInt(dates[0], 10);
+        var valmonth = parseInt(dates[1], 10);
+        var valday = parseInt(dates[2], 10);
+        return {
+            year: valyear,
+            month: valmonth,
+            day: valday
+        };
+    };
     //#endregion
 
-    var load = function () {
+    var load = function load() {
         var body = document.body;
         flyout_global_init();
         button_init(body);
@@ -916,3 +974,4 @@
 
     window.addEventListener("load", load, false);
 })();
+

@@ -1,4 +1,4 @@
-﻿(function () {
+﻿(function (window) {
     "use strict";
     var debounce_delay = 250;
 
@@ -109,7 +109,8 @@
         var span_size = document.createElement("span");
 
         div.className = "item";
-        img.src = "images/file.png";
+        //img.src = "images/file.png";
+        img.src = icon_helper.get_icon(file.fileExt);
         span_name.className = "itemname";
         span_name.innerText = file.name;
         span_size.className = "itemsize";
@@ -240,10 +241,18 @@
         path_container = $("#path_container")[0];
 
         $(input_filter).keyup($.debounce(debounce_delay, makefilter));
-        btn_reset.context.events.addHandler("click", clearfilter);
+        btn_reset.context.events.add("click", clearfilter);
 
         query_files("");
     };
 
+    window.control = {
+        get_path: getpath,
+        query_files: query_files,
+        get_dirs: function () {
+            return data_directories.map(function (dir) { return dir.name; });
+        }
+    };
+
     window.addEventListener("load", load, false);
-})();
+})(window);

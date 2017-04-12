@@ -22,20 +22,20 @@ namespace WebFileTransfer
                 .AddEnvironmentVariables();
             Configuration = builder.Build();
 
-            string configuredroot = Configuration["FileRoot"];
+            string configuredroot = Configuration["ContentRoot"];
             string pwd = System.IO.Directory.GetCurrentDirectory();
             string path = System.IO.Path.Combine(pwd, configuredroot);
-            if(System.IO.Directory.Exists(path) == false)
+            if (System.IO.Directory.Exists(path) == false)
             {
-                Console.WriteLine("FileRoot is not exisit");
+                Console.WriteLine("ContentRoot does not exisit");
                 GlobalConfig.Enabled = false;
             }
             else
             {
-                GlobalConfig.FileRoot = new System.IO.DirectoryInfo(path).FullName;
+                GlobalConfig.ContentRoot = PathHelper.ResolvePath(path);
                 GlobalConfig.Enabled = true;
             }
-            
+
         }
 
         public IConfigurationRoot Configuration { get; }
